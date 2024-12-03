@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Civitai Download Manager</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .download-entry {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .download-entry input {
+            margin-right: 10px;
+            padding: 5px;
+            flex-grow: 1;
+        }
+        #api-token-container {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        #api-token {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+        .radio-container {
+            display: flex;
+            margin-right: 10px;
+        }
+        #commands-output {
+            width: 100%;
+            margin-top: 20px;
+            min-height: 200px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Civitai Download Manager for Stable Diffusion</h1>
+    
+    <div id="api-token-container">
+        <input 
+            type="text" 
+            id="api-token" 
+            placeholder="Enter Civitai API Token"
+        >
+        <button onclick="saveApiToken()">Save Token</button>
+    </div>
+
+    <div id="downloads-container"></div>
+
+    <div>
+        <button onclick="addDownloadEntry()">Add Download</button>
+        <button onclick="generateDownloadCommands()">Generate Commands</button>
+    </div>
+
+    <textarea 
+        id="commands-output" 
+        rows="10" 
+        readonly
+    ></textarea>
+
+    <script>
+        // Sanitize model name for URL and filename
+        function sanitizeModelName(name) {
+            // Remove special characters and replace spaces with underscores
+            return name
+                .trim()
+                .replace(/[^a-zA-Z0-9_-]/g, '') // Remove all special characters except underscore and hyphen
+                .replace(/\s+/g, '_') // Replace spaces with underscores
+                .toLowerCase(); // Convert to lowercase
+        }
+
+        // Load saved API token on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedToken = localStorage.getItem('civitai_token');
+            if (savedToken) {
+                document.getElementById('api-token').value = savedToken;
+            }
+            
+            // Add first download entry by default
+            addDownloadEntry();
+        });
+
+        function saveApiToken() {
+            const tokenInput = document.getElementById('api-token');
+            const token = tokenInput.value.trim();
+            
+            if (token) {
+                localStorage.setItem('civitai_token', token);
+                alert('API Token saved successfully!');
+            }
+        }
+
+        function addDownloadEntry() {
+            const container = document.getElementById('downloads-container');
+            const entryId = Date.now();
+            
+            const entry = document.createElement('div');
+            entry.className = 'download-entry';
+            entry.id = `entry-${entryId}`;
+            entry.innerHTML = `
+                <div class="radio-container">
+                    <label>
+                        <input 
+                            type="radio" 
+                            name="type-${entryId}" 
+                            value="lora" 
+                            checked
+                        > LoRA
+                    </label>
+                    <label>
+                        <input 
+                            type="radio" 
+                            name="type-${entryId}" 
+                            value="checkpoint"
+                        > Checkpoint
+                    </label>
+                </div>
+                <input 
+                    type="text" 
+                    placeholder="Model Name" 
+                    class="model-name"
+                >
+                <input 
+                    type="text" 
+                    placeholder="Civitai Model Link" 
+                    class="model-link"
+                >
+                <button onclick="removeDownloadEntry('${entryId}')">Remove</button>
+            `;
+            
+            container.appendChild(entry);
+        }
+
+        function removeDownloadEntry(entryId) {
+            const entryElement = document.getElementById(`entry-${entryId}`);
+            if (entryElement) {
+                entryElement.remove();
+            }
+        }
+
+        function generateDownloadCommands() {
+            const apiToken = document.getElementById('api-token').value.trim();
+            const outputArea = document.getElementById('commands-output');
+            
+            if (!apiToken) {
+                alert('Please enter your Civitai API Token');
+                return;
+            }
+
+            const entries = document.querySelectorAll('.download-entry');
+            const downloadCommands = [];
+
+            entries.forEach(entry => {
+                const type = entry.querySelector('input[type="radio"]:checked').value;
+                const originalModelName = entry.querySelector('.model-name').value.trim();
+                const modelLink = entry.querySelector('.model-link').value.trim();
+
+                if (originalModelName && modelLink) {
+                    // Sanitize the model name
+                    const modelName = sanitizeModelName(originalModelName);
+
+                    const basePath = type === 'lora' 
+                        ? '/content/Fooocus/models/loras/' 
+                        : '/content/Fooocus/models/checkpoints/';
+                    
+                    const command = `!wget -O ${basePath}${modelName}.safetensors "${modelLink}&token=${apiToken}"`;
+                    downloadCommands.push(command);
+                }
+            });
+
+            // Full Fooocus setup with download commands
+            const fullCommands = [
+                '!pip install pygit2==1.15.1',
+                '%cd /content',
+                '!git clone https://github.com/lllyasviel/Fooocus.git',
+                '%cd /content/Fooocus',
+                '',  // Empty line for readability
+                ...downloadCommands,
+                '',  // Empty line for readability
+                '!python entry_with_update.py --share --always-high-vram'
+            ];
+
+            outputArea.value = fullCommands.join('\n');
+            
+            // Optional: Copy to clipboard
+            navigator.clipboard.writeText(outputArea.value)
+                .then(() => alert('Fooocus setup commands copied to clipboard!'))
+                .catch(err => console.error('Failed to copy commands', err));
+        }
+    </script>
+</body>
+</html>
